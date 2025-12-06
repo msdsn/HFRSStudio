@@ -397,42 +397,50 @@ def create_hetero_graph(
 def split_edges(
     edge_index: torch.Tensor,
     edge_label_index: torch.Tensor,
-    train_ratio: float = 0.6,
-    val_ratio: float = 0.2,
+    test_size: float = 0.2,
+    val_size: float = 0.25,
     seed: int = 42
 ) -> Dict[str, torch.Tensor]:
     """
     Split edges into train/val/test sets.
     
+    Uses the same split logic as original MOPI-HFRS:
+    - First split: test_size=0.2 (20% test)
+    - Second split: val_size=0.25 of remaining (25% of 80% = 20% val)
+    - Result: 60% train, 20% val, 20% test
+    
     Args:
         edge_index: Full edge index tensor
         edge_label_index: Positive edge index (for label split)
-        train_ratio: Ratio of training edges
-        val_ratio: Ratio of validation edges
+        test_size: Ratio of test edges (default 0.2)
+        val_size: Ratio of validation from remaining (default 0.25)
         seed: Random seed
         
     Returns:
         Dictionary with train/val/test edge indices
     """
-    num_edges = edge_index.shape[1]
-    indices = np.arange(num_edges)
+    # Convert to numpy for sklearn
+    edges = edge_index.numpy().T
     
-    # Split indices
-    train_indices, temp_indices = train_test_split(
-        indices, train_size=train_ratio, random_state=seed
+    # First split: separate test set
+    train_edges, test_edges = train_test_split(
+        edges, test_size=test_size, random_state=seed
     )
-    val_size = val_ratio / (1 - train_ratio)
-    val_indices, test_indices = train_test_split(
-        temp_indices, train_size=val_size, random_state=seed
+    
+    # Second split: separate validation from training
+    train_edges, val_edges = train_test_split(
+        train_edges, test_size=val_size, random_state=seed
     )
+    
+    # Convert back to tensors
+    train_edge_index = torch.LongTensor(train_edges).T
+    val_edge_index = torch.LongTensor(val_edges).T
+    test_edge_index = torch.LongTensor(test_edges).T
     
     return {
-        'train_edge_index': edge_index[:, train_indices],
-        'val_edge_index': edge_index[:, val_indices],
-        'test_edge_index': edge_index[:, test_indices],
-        'train_indices': torch.tensor(train_indices),
-        'val_indices': torch.tensor(val_indices),
-        'test_indices': torch.tensor(test_indices)
+        'train_edge_index': train_edge_index,
+        'val_edge_index': val_edge_index,
+        'test_edge_index': test_edge_index
     }
 
 
@@ -442,8 +450,8 @@ class HFRSDataset:
     def __init__(
         self,
         data_dir: str,
-        train_ratio: float = 0.6,
-        val_ratio: float = 0.2,
+        test_size: float = 0.2,
+        val_size: float = 0.25,
         seed: int = 42,
         normalize: bool = True,
         benchmark_type: str = 'all'
@@ -451,10 +459,12 @@ class HFRSDataset:
         """
         Initialize the dataset.
         
+        Uses same split as original MOPI-HFRS: 60% train, 20% val, 20% test
+        
         Args:
             data_dir: Path to directory containing CSV files
-            train_ratio: Ratio of training edges
-            val_ratio: Ratio of validation edges
+            test_size: Ratio of test edges (default 0.2)
+            val_size: Ratio of validation from remaining (default 0.25)
             seed: Random seed
             normalize: Whether to normalize features
             benchmark_type: 'macro' for 7 nutrients, 'all' for 16 nutrients
@@ -470,7 +480,7 @@ class HFRSDataset:
         edge_index = self.graph['user', 'eats', 'food'].edge_index
         edge_label_index = self.graph['user', 'eats', 'food'].edge_label_index
         
-        self.splits = split_edges(edge_index, edge_label_index, train_ratio, val_ratio, seed)
+        self.splits = split_edges(edge_index, edge_label_index, test_size, val_size, seed)
         
         # Store convenience attributes
         self.num_users = self.graph['user'].num_nodes
@@ -547,17 +557,19 @@ class HFRSDatasetFromPT:
     def __init__(
         self,
         pt_file: str,
-        train_ratio: float = 0.6,
-        val_ratio: float = 0.2,
+        test_size: float = 0.2,
+        val_size: float = 0.25,
         seed: int = 42
     ):
         """
         Initialize dataset from .pt file.
         
+        Uses same split as original MOPI-HFRS: 60% train, 20% val, 20% test
+        
         Args:
             pt_file: Path to .pt benchmark file (e.g., benchmark_macro.pt)
-            train_ratio: Ratio of training edges
-            val_ratio: Ratio of validation edges
+            test_size: Ratio of test edges (default 0.2)
+            val_size: Ratio of validation from remaining (default 0.25)
             seed: Random seed
         """
         self.pt_file = pt_file
@@ -584,7 +596,7 @@ class HFRSDatasetFromPT:
         edge_label_index = self.graph[('user', 'eats', 'food')].edge_label_index
         
         # Split edges
-        self.splits = self._split_edges(edge_index, edge_label_index, train_ratio, val_ratio, seed)
+        self.splits = self._split_edges(edge_index, edge_label_index, test_size, val_size, seed)
         
         print(f"Loaded: {self.num_users} users, {self.num_foods} foods")
         print(f"Edges: {edge_index.shape[1]} total, {self.splits['train_edge_index'].shape[1]} train")
@@ -593,21 +605,28 @@ class HFRSDatasetFromPT:
         self,
         edge_index: torch.Tensor,
         edge_label_index: torch.Tensor,
-        train_ratio: float,
-        val_ratio: float,
+        test_size: float,
+        val_size: float,
         seed: int
     ) -> Dict[str, torch.Tensor]:
-        """Split edges into train/val/test."""
-        num_edges = edge_index.shape[1]
-        indices = np.arange(num_edges)
+        """Split edges into train/val/test using same logic as original."""
+        # Convert to numpy for sklearn
+        edges = edge_index.numpy().T
         
-        train_indices, temp_indices = train_test_split(
-            indices, train_size=train_ratio, random_state=seed
+        # First split: separate test set
+        train_edges, test_edges = train_test_split(
+            edges, test_size=test_size, random_state=seed
         )
-        val_size = val_ratio / (1 - train_ratio)
-        val_indices, test_indices = train_test_split(
-            temp_indices, train_size=val_size, random_state=seed
+        
+        # Second split: separate validation from training
+        train_edges, val_edges = train_test_split(
+            train_edges, test_size=val_size, random_state=seed
         )
+        
+        # Convert back to tensors
+        train_edge_index = torch.LongTensor(train_edges).T
+        val_edge_index = torch.LongTensor(val_edges).T
+        test_edge_index = torch.LongTensor(test_edges).T
         
         # Get positive/negative edge indices from edge_label_index
         edge_label_set = set(
@@ -624,9 +643,9 @@ class HFRSDatasetFromPT:
         neg_edge_index = edge_index[:, ~pos_mask]
         
         return {
-            'train_edge_index': edge_index[:, train_indices],
-            'val_edge_index': edge_index[:, val_indices],
-            'test_edge_index': edge_index[:, test_indices],
+            'train_edge_index': train_edge_index,
+            'val_edge_index': val_edge_index,
+            'test_edge_index': test_edge_index,
             'pos_edge_index': pos_edge_index,
             'neg_edge_index': neg_edge_index
         }

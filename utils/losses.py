@@ -17,25 +17,19 @@ def jaccard_similarity(user_tags: Tensor, item_tags: Tensor) -> Tensor:
     """
     Compute Jaccard similarity between user and item health tags.
     
+    Based on original MOPI-HFRS implementation.
+    User tags and item tags should have the same dimension for proper matching.
+    
     Args:
-        user_tags: User health tag vectors (batch_size, num_user_tags)
-        item_tags: Item health tag vectors (batch_size, num_item_tags)
+        user_tags: User health tag vectors (batch_size, num_tags)
+        item_tags: Item health tag vectors (batch_size, num_tags)
         
     Returns:
         Jaccard similarity scores (batch_size,)
     """
-    # Handle dimension mismatch by using minimum number of tags
-    num_user_tags = user_tags.shape[1]
-    num_item_tags = item_tags.shape[1]
-    min_tags = min(num_user_tags, num_item_tags)
-    
-    # Truncate to matching dimensions
-    user_tags_matched = user_tags[:, :min_tags]
-    item_tags_matched = item_tags[:, :min_tags]
-    
-    # Compute intersection and union
-    intersection = torch.sum(torch.min(user_tags_matched, item_tags_matched), dim=1).float()
-    union = torch.sum(torch.max(user_tags_matched, item_tags_matched), dim=1).float()
+    # Compute intersection and union (element-wise min/max)
+    intersection = torch.sum(torch.min(user_tags, item_tags), dim=1).float()
+    union = torch.sum(torch.max(user_tags, item_tags), dim=1).float()
     
     # Avoid division by zero
     jaccard = intersection / (union + 1e-8)
@@ -101,6 +95,9 @@ def health_loss(
     Encourages the model to recommend items that match user's health needs
     based on the Jaccard similarity of health tags.
     
+    Based on original MOPI-HFRS equation (11):
+    L_health = -sum log((J(t_u, t_i) - J(t_u, t_j)) * sigmoid(y_uij))
+    
     Args:
         users_emb_final: User embeddings
         pos_items_emb_final: Positive item embeddings
@@ -113,24 +110,24 @@ def health_loss(
         Health loss value
     """
     # Compute prediction scores
-    pos_scores = torch.sum(users_emb_final * pos_items_emb_final, dim=-1)
-    neg_scores = torch.sum(users_emb_final * neg_items_emb_final, dim=-1)
+    pos_scores = torch.mul(users_emb_final, pos_items_emb_final)
+    pos_scores = torch.sum(pos_scores, dim=-1)
+    neg_scores = torch.mul(users_emb_final, neg_items_emb_final)
+    neg_scores = torch.sum(neg_scores, dim=-1)
     
     # Compute Jaccard similarity for health tags
     pos_jaccard = jaccard_similarity(user_tags, pos_item_tags)
     neg_jaccard = jaccard_similarity(user_tags, neg_item_tags)
     
-    # Normalize Jaccard difference to [0, 1]
+    # Normalize Jaccard difference to [0, 1] range
     jaccard_diff = ((pos_jaccard - neg_jaccard) + 1) / 2
     
-    # Health loss: weight BPR by health relevance
-    loss = -torch.mean(
-        torch.log(
-            jaccard_diff * torch.sigmoid(pos_scores - neg_scores) + 1e-8
-        )
+    # Health loss: multiply jaccard weight with sigmoid of score difference
+    health_loss = -torch.mean(
+        torch.log(torch.mul(jaccard_diff, torch.sigmoid(pos_scores - neg_scores)) + 1e-8)
     )
     
-    return loss
+    return health_loss
 
 
 def diversity_loss(
@@ -144,6 +141,9 @@ def diversity_loss(
 ) -> Tensor:
     """
     Diversity loss for nutritional variety.
+    
+    Based on original MOPI-HFRS equation (12):
+    L_diversity = -sum log(sigmoid((sim_pos - sim_neg) * (score_pos - score_neg)))
     
     Encourages diverse recommendations by minimizing similarity
     among top-k recommended items.
@@ -162,57 +162,44 @@ def diversity_loss(
     """
     def get_top_k_recommendations(user_emb: Tensor, item_emb: Tensor, k: int) -> Tensor:
         """Get top-k item indices for each user."""
-        scores = torch.matmul(user_emb, item_emb.t())
-        _, top_k_indices = torch.topk(scores, k=min(k, item_emb.size(0)), dim=1)
+        scores = torch.matmul(user_emb, item_emb.T)
+        _, top_k_indices = torch.topk(scores, k=k, dim=1)
         return top_k_indices
     
-    def get_mean_similarity(user_features: Tensor, item_features: Tensor, k: int) -> Tensor:
+    def get_mean_similarity(user_features_batch: Tensor, item_features_batch: Tensor, k: int) -> Tensor:
         """Compute mean pairwise similarity among top-k items."""
         # Get top-k indices
-        top_k_indices = get_top_k_recommendations(user_features, item_features, k)
+        top_k_indices = get_top_k_recommendations(user_features_batch, item_features_batch, k)
+        top_k_item_embs = item_features_batch[top_k_indices]
         
-        # Get embeddings for top-k items
-        batch_size = user_features.size(0)
-        actual_k = top_k_indices.size(1)
+        # Calculate cosine similarities for all pairs in top-k items
+        # Using unsqueeze for broadcasting: (num_users, k, 1, dim) vs (num_users, 1, k, dim)
+        similarities = F.cosine_similarity(
+            top_k_item_embs.unsqueeze(2),  # Shape: (num_users, k, 1, dim)
+            top_k_item_embs.unsqueeze(1),  # Shape: (num_users, 1, k, dim)
+            dim=3
+        )
         
-        # Gather top-k item embeddings
-        top_k_item_embs = item_features[top_k_indices]  # (batch, k, dim)
+        # Select upper triangular part (excluding diagonal)
+        upper_triangular_indices = torch.triu_indices(k, k, 1, device=similarities.device)
+        selected_similarities = similarities[:, upper_triangular_indices[0], upper_triangular_indices[1]]
         
-        # Compute pairwise cosine similarities
-        # Normalize embeddings
-        top_k_normalized = F.normalize(top_k_item_embs, p=2, dim=2)
-        
-        # Compute similarity matrix
-        similarities = torch.bmm(
-            top_k_normalized,
-            top_k_normalized.transpose(1, 2)
-        )  # (batch, k, k)
-        
-        # Get upper triangular part (excluding diagonal)
-        mask = torch.triu(torch.ones(actual_k, actual_k, device=similarities.device), diagonal=1)
-        mask = mask.unsqueeze(0).expand(batch_size, -1, -1)
-        
-        # Compute mean similarity
-        num_pairs = actual_k * (actual_k - 1) / 2
-        mean_sim = (similarities * mask).sum(dim=(1, 2)) / (num_pairs + 1e-8)
-        
-        return mean_sim
+        # Return mean similarity for each user
+        return selected_similarities.mean(dim=1)
     
     # Compute mean similarity for positive and negative items
     pos_similarity = get_mean_similarity(user_features, pos_item_features, k)
     neg_similarity = get_mean_similarity(user_features, neg_item_features, k)
     
     # Compute prediction scores
-    pos_scores = torch.sum(users_emb_final * pos_items_emb_final, dim=-1)
-    neg_scores = torch.sum(users_emb_final * neg_items_emb_final, dim=-1)
+    pos_scores = torch.mul(users_emb_final, pos_items_emb_final)
+    pos_scores = torch.sum(pos_scores, dim=-1)
+    neg_scores = torch.mul(users_emb_final, neg_items_emb_final)
+    neg_scores = torch.sum(neg_scores, dim=-1)
     
-    # Diversity loss: prefer lower similarity (more diverse)
-    # Lower similarity in positive items is better
-    sim_diff = pos_similarity - neg_similarity
-    score_diff = pos_scores - neg_scores
-    
+    # Diversity loss: sigmoid of (similarity_diff * score_diff)
     loss = -torch.mean(
-        F.logsigmoid(sim_diff * score_diff)
+        torch.log(torch.sigmoid(torch.mul(pos_similarity - neg_similarity, pos_scores - neg_scores)) + 1e-8)
     )
     
     return loss

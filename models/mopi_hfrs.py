@@ -137,13 +137,19 @@ class MOPI_HFRS(nn.Module):
         edge_index_new = edge_index[:, edge_mask]
         
         # Convert to sparse tensor for LightGCN
-        # Note: Original code does NOT add offset - edge_index already has food indices
-        # that will be used directly with LightGCN's internal embedding lookup
+        # CRITICAL: Add offset to food indices for LightGCN
+        # LightGCN concatenates [user_emb, item_emb], so food indices need offset
         sparse_size = self.num_users + self.num_foods
         
+        # Add num_users offset to food indices (col)
+        edge_index_with_offset = torch.stack([
+            edge_index_new[0],  # user indices stay the same
+            edge_index_new[1] + self.num_users  # food indices need offset
+        ], dim=0)
+        
         sparse_edge_index = SparseTensor(
-            row=edge_index_new[0],
-            col=edge_index_new[1],
+            row=edge_index_with_offset[0],
+            col=edge_index_with_offset[1],
             sparse_sizes=(sparse_size, sparse_size)
         )
         

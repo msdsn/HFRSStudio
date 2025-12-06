@@ -60,8 +60,11 @@ class TrainingConfig:
 class DataConfig:
     """Data configuration."""
     data_dir: str = 'MOPI-HFRS_gdrive/processed_data'
-    train_ratio: float = 0.6
-    val_ratio: float = 0.2
+    
+    # Split ratios (same as original MOPI-HFRS: 60% train, 20% val, 20% test)
+    test_size: float = 0.2  # 20% for test
+    val_size: float = 0.25  # 25% of remaining 80% = 20% for validation
+    
     normalize_features: bool = True
     
     # Benchmark type: 'macro' (7 nutrients) or 'all' (16 nutrients)

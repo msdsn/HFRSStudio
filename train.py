@@ -271,16 +271,16 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
         # Use pre-processed .pt file
         dataset = HFRSDatasetFromPT(
             pt_file,
-            train_ratio=config.data.train_ratio,
-            val_ratio=config.data.val_ratio,
+            test_size=config.data.test_size,
+            val_size=config.data.val_size,
             seed=config.training.seed
         )
     else:
         # Use CSV files
         dataset = HFRSDataset(
             config.data.data_dir,
-            train_ratio=config.data.train_ratio,
-            val_ratio=config.data.val_ratio,
+            test_size=config.data.test_size,
+            val_size=config.data.val_size,
             seed=config.training.seed,
             normalize=config.data.normalize_features,
             benchmark_type=config.data.benchmark_type
