@@ -98,15 +98,21 @@ def train_epoch(
     device: torch.device
 ) -> Dict[str, float]:
     """
-    Train for one epoch.
+    Train for one epoch - follows original MOPI-HFRS training loop exactly.
+    
+    Original flow from main.py:
+    1. Forward pass to get all embeddings
+    2. Mini-batch sampling
+    3. Get batch embeddings and compute loss
+    4. Backward and optimize
     
     Args:
         model: MOPI-HFRS model
         optimizer: Optimizer
         feature_dict: Feature dictionary
         edge_index: Training edge index
-        pos_edge_index: Positive edges
-        neg_edge_index: Negative edges
+        pos_edge_index: Positive edges (for this split)
+        neg_edge_index: Negative edges (for this split)
         user_tags: User health tags
         food_tags: Food health tags
         user_features: User features
@@ -119,12 +125,12 @@ def train_epoch(
     """
     model.train()
     
-    # Forward pass
+    # Forward pass - get all embeddings first (same as original)
     users_emb_final, users_emb_0, items_emb_final, items_emb_0 = model(
         feature_dict, edge_index, pos_edge_index, neg_edge_index
     )
     
-    # Sample mini-batch
+    # Mini-batch sampling (same as original sample_mini_batch)
     user_indices, pos_item_indices, neg_item_indices = sample_mini_batch(
         config.training.batch_size,
         edge_index,
@@ -136,12 +142,12 @@ def train_epoch(
     pos_item_indices = pos_item_indices.to(device)
     neg_item_indices = neg_item_indices.to(device)
     
-    # Get batch embeddings
-    users_emb_batch = users_emb_final[user_indices]
+    # Get batch embeddings (same variable names as original)
+    users_emb_final_batch = users_emb_final[user_indices]
     users_emb_0_batch = users_emb_0[user_indices]
-    pos_items_emb_batch = items_emb_final[pos_item_indices]
+    pos_items_emb_final_batch = items_emb_final[pos_item_indices]
     pos_items_emb_0_batch = items_emb_0[pos_item_indices]
-    neg_items_emb_batch = items_emb_final[neg_item_indices]
+    neg_items_emb_final_batch = items_emb_final[neg_item_indices]
     neg_items_emb_0_batch = items_emb_0[neg_item_indices]
     
     # Get batch tags
@@ -149,43 +155,42 @@ def train_epoch(
     pos_item_tags_batch = food_tags[pos_item_indices]
     neg_item_tags_batch = food_tags[neg_item_indices]
     
-    # Get batch features (pad user features to match food features)
+    # Pad user features to match food features (same as original)
     user_features_batch = user_features[user_indices]
-    if user_features_batch.size(1) < food_features.size(1):
-        user_features_batch = torch.nn.functional.pad(
-            user_features_batch,
-            (0, food_features.size(1) - user_features_batch.size(1))
-        )
+    user_features_batch = torch.nn.functional.pad(
+        user_features_batch, 
+        (0, food_features.size(1) - user_features_batch.size(1))
+    )
     
     pos_item_features_batch = food_features[pos_item_indices]
     neg_item_features_batch = food_features[neg_item_indices]
     
-    # Compute loss
+    # Compute loss using Pareto optimization (same as original)
     if config.training.use_pareto:
         train_loss, loss_data, _ = pareto_loss(
             model,
-            users_emb_batch, users_emb_0_batch,
-            pos_items_emb_batch, pos_items_emb_0_batch,
-            neg_items_emb_batch, neg_items_emb_0_batch,
+            users_emb_final_batch, users_emb_0_batch,
+            pos_items_emb_final_batch, pos_items_emb_0_batch,
+            neg_items_emb_final_batch, neg_items_emb_0_batch,
             user_features_batch, pos_item_features_batch, neg_item_features_batch,
             user_tags_batch, pos_item_tags_batch, neg_item_tags_batch,
             config.training.lambda_val,
             config.training.normalization_type
         )
     else:
-        # Simple weighted sum
+        # Simple weighted sum (fallback)
         l_bpr = bpr_loss(
-            users_emb_batch, users_emb_0_batch,
-            pos_items_emb_batch, pos_items_emb_0_batch,
-            neg_items_emb_batch, neg_items_emb_0_batch,
+            users_emb_final_batch, users_emb_0_batch,
+            pos_items_emb_final_batch, pos_items_emb_0_batch,
+            neg_items_emb_final_batch, neg_items_emb_0_batch,
             config.training.lambda_val
         )
         l_health = health_loss(
-            users_emb_batch, pos_items_emb_batch, neg_items_emb_batch,
+            users_emb_final_batch, pos_items_emb_final_batch, neg_items_emb_final_batch,
             user_tags_batch, pos_item_tags_batch, neg_item_tags_batch
         )
         l_diversity = diversity_loss(
-            users_emb_batch, pos_items_emb_batch, neg_items_emb_batch,
+            users_emb_final_batch, pos_items_emb_final_batch, neg_items_emb_final_batch,
             user_features_batch, pos_item_features_batch, neg_item_features_batch
         )
         
@@ -212,17 +217,17 @@ def evaluate(
     k: int = 20
 ) -> Dict[str, float]:
     """
-    Evaluate model.
+    Evaluate model - follows original MOPI-HFRS eval() function.
     
     Args:
         model: MOPI-HFRS model
         feature_dict: Feature dictionary
         edge_index: Evaluation edge index
-        pos_edge_index: Positive edges
-        neg_edge_index: Negative edges
+        pos_edge_index: Positive edges for this split
+        neg_edge_index: Negative edges for this split
         user_tags: User health tags
         food_tags: Food health tags
-        exclude_edges: Edges to exclude
+        exclude_edges: Edges to exclude (e.g., training edges)
         k: Top-K for metrics
         
     Returns:
@@ -231,10 +236,12 @@ def evaluate(
     model.eval()
     
     with torch.no_grad():
-        users_emb_final, _, items_emb_final, _ = model(
+        # Forward pass
+        users_emb_final, users_emb_0, items_emb_final, items_emb_0 = model(
             feature_dict, edge_index, pos_edge_index, neg_edge_index
         )
         
+        # Compute metrics using the embeddings
         metrics = get_metrics(
             users_emb_final,
             items_emb_final,
@@ -267,16 +274,32 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
     # Load data
     print("Loading data...")
     
+    # Determine which .pt file to use based on benchmark_type
+    pt_file_path = None
     if use_pt_file and pt_file:
-        # Use pre-processed .pt file
+        pt_file_path = pt_file
+    else:
+        # Auto-detect .pt file from data_dir
+        import os
+        data_dir = config.data.data_dir
+        benchmark_type = config.data.benchmark_type
+        pt_filename = f"benchmark_{benchmark_type}.pt"
+        potential_pt = os.path.join(data_dir, pt_filename)
+        if os.path.exists(potential_pt):
+            pt_file_path = potential_pt
+            print(f"Found benchmark file: {pt_file_path}")
+    
+    if pt_file_path:
+        # Use pre-processed .pt file (RECOMMENDED - matches original paper)
         dataset = HFRSDatasetFromPT(
-            pt_file,
+            pt_file_path,
             test_size=config.data.test_size,
             val_size=config.data.val_size,
             seed=config.training.seed
         )
     else:
-        # Use CSV files
+        # Fallback to CSV files (may produce different results)
+        print("WARNING: Using CSV files instead of .pt benchmark. Results may differ from paper.")
         dataset = HFRSDataset(
             config.data.data_dir,
             test_size=config.data.test_size,
@@ -294,9 +317,31 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
     val_edge_index = dataset.splits['val_edge_index']
     test_edge_index = dataset.splits['test_edge_index']
     
-    # pos/neg edge indices are stored in graph, not splits
-    pos_edge_index = dataset.graph['user', 'eats', 'food'].pos_edge_index.to(device)
-    neg_edge_index = dataset.graph['user', 'eats', 'food'].neg_edge_index.to(device)
+    # Get pos/neg edge indices for each split (following original split_data_new)
+    if 'pos_train_edge_index' in dataset.splits:
+        # New format with per-split pos/neg edges
+        pos_train_edge_index = dataset.splits['pos_train_edge_index'].to(device)
+        neg_train_edge_index = dataset.splits['neg_train_edge_index'].to(device)
+        pos_val_edge_index = dataset.splits['pos_val_edge_index'].to(device)
+        neg_val_edge_index = dataset.splits['neg_val_edge_index'].to(device)
+        pos_test_edge_index = dataset.splits['pos_test_edge_index'].to(device)
+        neg_test_edge_index = dataset.splits['neg_test_edge_index'].to(device)
+    elif 'pos_edge_index' in dataset.splits:
+        # Old format - use same pos/neg for all splits
+        pos_train_edge_index = dataset.splits['pos_edge_index'].to(device)
+        neg_train_edge_index = dataset.splits['neg_edge_index'].to(device)
+        pos_val_edge_index = pos_train_edge_index
+        neg_val_edge_index = neg_train_edge_index
+        pos_test_edge_index = pos_train_edge_index
+        neg_test_edge_index = neg_train_edge_index
+    else:
+        # From graph
+        pos_train_edge_index = dataset.graph['user', 'eats', 'food'].pos_edge_index.to(device)
+        neg_train_edge_index = dataset.graph['user', 'eats', 'food'].neg_edge_index.to(device)
+        pos_val_edge_index = pos_train_edge_index
+        neg_val_edge_index = neg_train_edge_index
+        pos_test_edge_index = pos_train_edge_index
+        neg_test_edge_index = neg_train_edge_index
     
     feature_dict = dataset.get_feature_dict()
     user_tags = dataset.user_tags
@@ -329,16 +374,16 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Model parameters: {num_params:,}")
     
-    # Optimizer and scheduler
+    # Optimizer and scheduler (matching original: Adam + ExponentialLR)
     optimizer = optim.Adam(
         model.parameters(),
-        lr=config.training.learning_rate,
-        weight_decay=config.training.weight_decay
+        lr=config.training.learning_rate
+        # Note: original doesn't use weight_decay in optimizer
     )
-    scheduler = optim.lr_scheduler.StepLR(
+    # Original uses ExponentialLR with gamma=0.95
+    scheduler = optim.lr_scheduler.ExponentialLR(
         optimizer,
-        step_size=config.training.lr_decay_step,
-        gamma=config.training.lr_decay_gamma
+        gamma=0.95
     )
     
     # Metric tracker
@@ -356,23 +401,24 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
     best_recall = 0.0
     
     for epoch in tqdm(range(config.training.epochs), desc="Training"):
-        # Train
+        # Train using training split's pos/neg edges
         loss_dict = train_epoch(
             model, optimizer,
-            feature_dict, train_edge_index, pos_edge_index, neg_edge_index,
+            feature_dict, train_edge_index, pos_train_edge_index, neg_train_edge_index,
             user_tags, food_tags, user_features, food_features,
             config, device
         )
         
-        # Update scheduler
-        scheduler.step()
+        # Update scheduler every lr_decay_step epochs (original: 200)
+        if (epoch + 1) % config.training.lr_decay_step == 0:
+            scheduler.step()
         
-        # Evaluate
+        # Evaluate on validation set
         if (epoch + 1) % config.training.eval_every == 0:
             val_metrics = evaluate(
                 model, feature_dict,
-                val_edge_index, pos_edge_index, neg_edge_index,
-                user_tags, food_tags, train_edge_index,
+                val_edge_index, pos_val_edge_index, neg_val_edge_index,
+                user_tags, food_tags, neg_train_edge_index,  # Exclude negative training edges
                 config.training.k
             )
             
@@ -409,8 +455,8 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
     print("\nEvaluating on test set...")
     test_metrics = evaluate(
         model, feature_dict,
-        test_edge_index, pos_edge_index, neg_edge_index,
-        user_tags, food_tags, train_edge_index,
+        test_edge_index, pos_test_edge_index, neg_test_edge_index,
+        user_tags, food_tags, neg_train_edge_index,  # Exclude negative training edges
         config.training.k
     )
     

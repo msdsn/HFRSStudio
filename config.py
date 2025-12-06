@@ -29,8 +29,8 @@ class TrainingConfig:
     lr_decay_gamma: float = 0.95
     lr_decay_step: int = 200
     
-    # Evaluation
-    eval_every: int = 50
+    # Evaluation (original: iters_per_eval=500)
+    eval_every: int = 500
     k: int = 20  # Top-K for evaluation
     
     # Regularization

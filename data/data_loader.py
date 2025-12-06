@@ -533,6 +533,8 @@ class HFRSDatasetFromPT:
     """
     Dataset class that loads pre-processed .pt benchmark files.
     Compatible with the original MOPI-HFRS benchmark files.
+    
+    Uses the exact same splitting logic as original RCSYS_utils.split_data_new()
     """
     
     def __init__(
@@ -576,13 +578,14 @@ class HFRSDatasetFromPT:
         edge_index = self.graph[('user', 'eats', 'food')].edge_index
         edge_label_index = self.graph[('user', 'eats', 'food')].edge_label_index
         
-        # Split edges
-        self.splits = self._split_edges(edge_index, edge_label_index, test_size, val_size, seed)
+        # Split edges using same logic as original split_data_new
+        self.splits = self._split_edges_like_original(edge_index, edge_label_index, test_size, val_size, seed)
         
         print(f"Loaded: {self.num_users} users, {self.num_foods} foods")
         print(f"Edges: {edge_index.shape[1]} total, {self.splits['train_edge_index'].shape[1]} train")
+        print(f"Train pos/neg: {self.splits['pos_train_edge_index'].shape[1]}/{self.splits['neg_train_edge_index'].shape[1]}")
     
-    def _split_edges(
+    def _split_edges_like_original(
         self,
         edge_index: torch.Tensor,
         edge_label_index: torch.Tensor,
@@ -590,16 +593,18 @@ class HFRSDatasetFromPT:
         val_size: float,
         seed: int
     ) -> Dict[str, torch.Tensor]:
-        """Split edges into train/val/test using same logic as original."""
-        # Convert to numpy for sklearn
+        """
+        Split edges exactly like original RCSYS_utils.split_data_new().
+        
+        This creates separate pos/neg edge indices for train, val, and test sets.
+        """
+        # Convert to numpy for sklearn (same as original)
         edges = edge_index.numpy().T
         
-        # First split: separate test set
+        # Split 6-2-2 (same as original)
         train_edges, test_edges = train_test_split(
             edges, test_size=test_size, random_state=seed
         )
-        
-        # Second split: separate validation from training
         train_edges, val_edges = train_test_split(
             train_edges, test_size=val_size, random_state=seed
         )
@@ -609,26 +614,49 @@ class HFRSDatasetFromPT:
         val_edge_index = torch.LongTensor(val_edges).T
         test_edge_index = torch.LongTensor(test_edges).T
         
-        # Get positive/negative edge indices from edge_label_index
-        edge_label_set = set(
-            tuple(edge_label_index[:, i].tolist()) 
-            for i in range(edge_label_index.size(1))
-        )
+        def get_pos_neg_edge_indices(edge_label_index, split_edge_index):
+            """Same logic as original get_pos_neg_edge_indices."""
+            # Convert edge_label_index to a set of tuples for easy comparison
+            edge_label_set = set(
+                tuple(edge_label_index[:, i].tolist()) 
+                for i in range(edge_label_index.size(1))
+            )
+            
+            # Identify positive edges in edge_index
+            pos_edges = [edge for edge in split_edge_index.t().tolist() if tuple(edge) in edge_label_set]
+            neg_edges = [edge for edge in split_edge_index.t().tolist() if tuple(edge) not in edge_label_set]
+            
+            # Handle empty cases
+            if len(pos_edges) == 0:
+                pos_edge_index = torch.zeros((2, 0), dtype=torch.long)
+            else:
+                pos_edge_index = torch.tensor(pos_edges).t()
+            
+            if len(neg_edges) == 0:
+                neg_edge_index = torch.zeros((2, 0), dtype=torch.long)
+            else:
+                neg_edge_index = torch.tensor(neg_edges).t()
+            
+            return pos_edge_index, neg_edge_index
         
-        pos_mask = torch.tensor([
-            tuple(edge_index[:, i].tolist()) in edge_label_set 
-            for i in range(edge_index.size(1))
-        ])
-        
-        pos_edge_index = edge_index[:, pos_mask]
-        neg_edge_index = edge_index[:, ~pos_mask]
+        # Get positive and negative edges for train, valid, and test sets
+        pos_train, neg_train = get_pos_neg_edge_indices(edge_label_index, train_edge_index)
+        pos_val, neg_val = get_pos_neg_edge_indices(edge_label_index, val_edge_index)
+        pos_test, neg_test = get_pos_neg_edge_indices(edge_label_index, test_edge_index)
         
         return {
             'train_edge_index': train_edge_index,
             'val_edge_index': val_edge_index,
             'test_edge_index': test_edge_index,
-            'pos_edge_index': pos_edge_index,
-            'neg_edge_index': neg_edge_index
+            'pos_train_edge_index': pos_train,
+            'neg_train_edge_index': neg_train,
+            'pos_val_edge_index': pos_val,
+            'neg_val_edge_index': neg_val,
+            'pos_test_edge_index': pos_test,
+            'neg_test_edge_index': neg_test,
+            # Also keep overall pos/neg for backward compatibility
+            'pos_edge_index': pos_train,
+            'neg_edge_index': neg_train
         }
     
     def get_feature_dict(self) -> Dict[str, torch.Tensor]:

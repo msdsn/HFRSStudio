@@ -87,9 +87,14 @@ class SignedGCN(nn.Module):
         """
         Compute node embeddings based on positive and negative edges.
         
+        NOTE: Following original SGSL implementation which does NOT add offset
+        to food indices. This means food index 0 maps to x[0] (user embedding),
+        not x[num_users] (food embedding). This is technically incorrect but
+        matches the original paper's implementation.
+        
         Args:
-            pos_edge_index: Positive (healthy) edge indices
-            neg_edge_index: Negative (unhealthy) edge indices
+            pos_edge_index: Positive (healthy) edge indices (bipartite format)
+            neg_edge_index: Negative (unhealthy) edge indices (bipartite format)
             
         Returns:
             Node embeddings tensor
@@ -97,7 +102,7 @@ class SignedGCN(nn.Module):
         # Concatenate user and item embeddings
         x = torch.cat([self.users_emb.weight, self.items_emb.weight])
         
-        # First layer
+        # First layer - using bipartite edge indices directly (matching original)
         z = F.relu(self.conv1(x, pos_edge_index, neg_edge_index))
         
         # Subsequent layers

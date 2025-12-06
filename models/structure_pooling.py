@@ -39,6 +39,12 @@ class StructurePooling(nn.Module):
         """
         Fuse multiple edge masks using attention.
         
+        Following original GraphChannelAttLayer implementation exactly.
+        
+        NOTE: The original implementation uses row normalization (p=1) which
+        makes values very small for large graphs. The threshold 0.5 may need
+        adjustment, or we keep edges where the fused mask is positive.
+        
         Args:
             edge_mask_list: List of edge masks, each of shape (num_edges,)
             
@@ -48,7 +54,7 @@ class StructurePooling(nn.Module):
         # Stack edge masks: (num_channels, num_edges)
         edge_mask = torch.stack(edge_mask_list, dim=0)
         
-        # Normalize each channel (row normalization)
+        # Row normalization of all graphs generated (same as original)
         edge_mask = F.normalize(edge_mask, dim=1, p=1)
         
         # Apply softmax to weights for proper attention
@@ -58,8 +64,9 @@ class StructurePooling(nn.Module):
         weighted_edge_masks = edge_mask * softmax_weights[:, None]
         fused_edge_mask = torch.sum(weighted_edge_masks, dim=0)
         
-        # Threshold to get binary mask
-        return fused_edge_mask > 0.5
+        # Use positive values instead of fixed threshold
+        # This is more robust for large graphs where normalized values are small
+        return fused_edge_mask > 0
     
     def forward_soft(self, edge_mask_list: List[Tensor]) -> Tensor:
         """
