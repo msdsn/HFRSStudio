@@ -15,61 +15,27 @@ from typing import Tuple, Dict, Optional, Union
 from pathlib import Path
 
 
-# Health tag columns for users - MACRO only (7 nutrients)
-USER_HEALTH_TAGS_MACRO = [
-    'user_low_calorie', 'user_high_calorie',
-    'user_low_carb',
-    'user_low_protein', 'user_high_protein',
-    'user_low_saturated_fat',
-    'user_low_cholesterol',
-    'user_low_sugar',
-    'user_high_fiber'
-]
-
-# Health tag columns for users - ALL (16 nutrients: 7 macro + 9 micro)
-USER_HEALTH_TAGS_ALL = [
-    # Macro nutrients (7)
-    'user_low_calorie', 'user_high_calorie',
-    'user_low_carb',
-    'user_low_protein', 'user_high_protein',
-    'user_low_saturated_fat',
-    'user_low_cholesterol',
-    'user_low_sugar',
-    'user_high_fiber',
-    # Micro nutrients (9)
-    'user_low_sodium',
-    'user_high_potassium',
-    'user_low_phosphorus',
-    'user_high_iron',
-    'user_high_calcium',
-    'user_high_folate_acid',
-    'user_high_vitamin_c',
-    'user_high_vitamin_d',
-    'user_high_vitamin_b12'
-]
-
-# Health tag columns for foods - MACRO only
+# Health tag columns for foods - MACRO only (14 tags)
+# Order from 0.2_food_tagging.ipynb
 FOOD_HEALTH_TAGS_MACRO = [
     'low_calorie', 'high_calorie',
     'low_carb', 'high_carb',
     'low_protein', 'high_protein',
     'low_saturated_fat', 'high_saturated_fat',
-    'low_cholesterol', 'high_cholesterol',
     'low_sugar', 'high_sugar',
+    'low_cholesterol', 'high_cholesterol',
     'low_fiber', 'high_fiber'
 ]
 
-# Health tag columns for foods - ALL
+# Health tag columns for foods - ALL (32 tags)
 FOOD_HEALTH_TAGS_ALL = [
-    # Macro nutrients
     'low_calorie', 'high_calorie',
     'low_carb', 'high_carb',
     'low_protein', 'high_protein',
     'low_saturated_fat', 'high_saturated_fat',
-    'low_cholesterol', 'high_cholesterol',
     'low_sugar', 'high_sugar',
+    'low_cholesterol', 'high_cholesterol',
     'low_fiber', 'high_fiber',
-    # Micro nutrients
     'low_sodium', 'high_sodium',
     'low_potassium', 'high_potassium',
     'low_phosphorus', 'high_phosphorus',
@@ -80,6 +46,12 @@ FOOD_HEALTH_TAGS_ALL = [
     'low_vitamin_d', 'high_vitamin_d',
     'low_vitamin_b12', 'high_vitamin_b12'
 ]
+
+# User tags should match food tags order for Jaccard similarity
+# In original benchmark (0.3_benchmark.ipynb), user tags are reordered to match food tags:
+# ordered_columns = ['SEQN'] + ['user_' + col for col in nutrition_columns]
+USER_HEALTH_TAGS_MACRO = ['user_' + tag for tag in FOOD_HEALTH_TAGS_MACRO]
+USER_HEALTH_TAGS_ALL = ['user_' + tag for tag in FOOD_HEALTH_TAGS_ALL]
 
 # Default to ALL for backward compatibility
 USER_HEALTH_TAGS = USER_HEALTH_TAGS_ALL
@@ -142,6 +114,9 @@ def create_user_features(
     """
     Create user feature tensor and health tag tensor.
     
+    User tags are reordered to match food tags order for Jaccard similarity.
+    Missing columns are filled with 0 (as in original benchmark).
+    
     Args:
         user_df: User dataframe with demographic and health tag columns
         normalize: Whether to normalize demographic features
@@ -153,8 +128,11 @@ def create_user_features(
     # Get appropriate health tags based on benchmark type
     user_tags_cols, _ = get_health_tags(benchmark_type)
     
-    # Filter to existing columns only
-    existing_user_tags = [col for col in user_tags_cols if col in user_df.columns]
+    # Create a copy and add missing columns with 0 (as in original benchmark)
+    user_df = user_df.copy()
+    for col in user_tags_cols:
+        if col not in user_df.columns:
+            user_df[col] = 0
     
     # Extract demographic features
     demographic_features = user_df[USER_DEMOGRAPHIC_COLUMNS].fillna(0).values.astype(np.float32)
@@ -163,13 +141,13 @@ def create_user_features(
         scaler = StandardScaler()
         demographic_features = scaler.fit_transform(demographic_features)
     
-    # Extract health tags
-    health_tags = user_df[existing_user_tags].fillna(0).values.astype(np.float32)
+    # Extract health tags in the correct order (matching food tags)
+    health_tags = user_df[user_tags_cols].fillna(0).values.astype(np.float32)
     
     # Combine features (demographic + health tags)
     features = np.concatenate([demographic_features, health_tags], axis=1)
     
-    print(f"User features: {features.shape[1]} dims (demo: {len(USER_DEMOGRAPHIC_COLUMNS)}, tags: {len(existing_user_tags)})")
+    print(f"User features: {features.shape[1]} dims (demo: {len(USER_DEMOGRAPHIC_COLUMNS)}, tags: {len(user_tags_cols)})")
     
     return torch.tensor(features, dtype=torch.float32), torch.tensor(health_tags, dtype=torch.float32)
 
@@ -193,8 +171,11 @@ def create_food_features(
     # Get appropriate health tags based on benchmark type
     _, food_tags_cols = get_health_tags(benchmark_type)
     
-    # Filter to existing columns only
-    existing_food_tags = [col for col in food_tags_cols if col in food_df.columns]
+    # Create a copy and add missing columns with 0
+    food_df = food_df.copy()
+    for col in food_tags_cols:
+        if col not in food_df.columns:
+            food_df[col] = 0
     
     # Extract nutrient features
     nutrient_features = food_df[NUTRIENT_COLUMNS].fillna(0).values.astype(np.float32)
@@ -203,13 +184,13 @@ def create_food_features(
         scaler = StandardScaler()
         nutrient_features = scaler.fit_transform(nutrient_features)
     
-    # Extract health tags
-    health_tags = food_df[existing_food_tags].fillna(0).values.astype(np.float32)
+    # Extract health tags in the correct order
+    health_tags = food_df[food_tags_cols].fillna(0).values.astype(np.float32)
     
     # Combine features (nutrients + health tags)
     features = np.concatenate([nutrient_features, health_tags], axis=1)
     
-    print(f"Food features: {features.shape[1]} dims (nutrients: {len(NUTRIENT_COLUMNS)}, tags: {len(existing_food_tags)})")
+    print(f"Food features: {features.shape[1]} dims (nutrients: {len(NUTRIENT_COLUMNS)}, tags: {len(food_tags_cols)})")
     
     return torch.tensor(features, dtype=torch.float32), torch.tensor(health_tags, dtype=torch.float32)
 

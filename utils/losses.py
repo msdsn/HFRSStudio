@@ -18,15 +18,20 @@ def jaccard_similarity(user_tags: Tensor, item_tags: Tensor) -> Tensor:
     Compute Jaccard similarity between user and item health tags.
     
     Based on original MOPI-HFRS implementation.
-    User tags and item tags should have the same dimension for proper matching.
+    Handles dimension mismatch by using minimum of tag dimensions.
     
     Args:
-        user_tags: User health tag vectors (batch_size, num_tags)
-        item_tags: Item health tag vectors (batch_size, num_tags)
+        user_tags: User health tag vectors (batch_size, num_user_tags)
+        item_tags: Item health tag vectors (batch_size, num_item_tags)
         
     Returns:
         Jaccard similarity scores (batch_size,)
     """
+    # Handle dimension mismatch by using minimum number of tags
+    min_tags = min(user_tags.shape[1], item_tags.shape[1])
+    user_tags = user_tags[:, :min_tags]
+    item_tags = item_tags[:, :min_tags]
+    
     # Compute intersection and union (element-wise min/max)
     intersection = torch.sum(torch.min(user_tags, item_tags), dim=1).float()
     union = torch.sum(torch.max(user_tags, item_tags), dim=1).float()
