@@ -18,15 +18,24 @@ def jaccard_similarity(user_tags: Tensor, item_tags: Tensor) -> Tensor:
     Compute Jaccard similarity between user and item health tags.
     
     Args:
-        user_tags: User health tag vectors (batch_size, num_tags)
-        item_tags: Item health tag vectors (batch_size, num_tags)
+        user_tags: User health tag vectors (batch_size, num_user_tags)
+        item_tags: Item health tag vectors (batch_size, num_item_tags)
         
     Returns:
         Jaccard similarity scores (batch_size,)
     """
+    # Handle dimension mismatch by using minimum number of tags
+    num_user_tags = user_tags.shape[1]
+    num_item_tags = item_tags.shape[1]
+    min_tags = min(num_user_tags, num_item_tags)
+    
+    # Truncate to matching dimensions
+    user_tags_matched = user_tags[:, :min_tags]
+    item_tags_matched = item_tags[:, :min_tags]
+    
     # Compute intersection and union
-    intersection = torch.sum(torch.min(user_tags, item_tags), dim=1).float()
-    union = torch.sum(torch.max(user_tags, item_tags), dim=1).float()
+    intersection = torch.sum(torch.min(user_tags_matched, item_tags_matched), dim=1).float()
+    union = torch.sum(torch.max(user_tags_matched, item_tags_matched), dim=1).float()
     
     # Avoid division by zero
     jaccard = intersection / (union + 1e-8)

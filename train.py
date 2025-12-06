@@ -282,7 +282,8 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
             train_ratio=config.data.train_ratio,
             val_ratio=config.data.val_ratio,
             seed=config.training.seed,
-            normalize=config.data.normalize_features
+            normalize=config.data.normalize_features,
+            benchmark_type=config.data.benchmark_type
         )
     
     # Move data to device
@@ -293,8 +294,9 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
     val_edge_index = dataset.splits['val_edge_index']
     test_edge_index = dataset.splits['test_edge_index']
     
-    pos_edge_index = dataset.splits['pos_edge_index'].to(device)
-    neg_edge_index = dataset.splits['neg_edge_index'].to(device)
+    # pos/neg edge indices are stored in graph, not splits
+    pos_edge_index = dataset.graph['user', 'eats', 'food'].pos_edge_index.to(device)
+    neg_edge_index = dataset.graph['user', 'eats', 'food'].neg_edge_index.to(device)
     
     feature_dict = dataset.get_feature_dict()
     user_tags = dataset.user_tags
@@ -435,6 +437,9 @@ def main():
     # Data arguments
     parser.add_argument('--data_dir', type=str, default='MOPI-HFRS_gdrive/processed_data',
                         help='Path to data directory')
+    parser.add_argument('--benchmark_type', type=str, default='macro',
+                        choices=['macro', 'all'],
+                        help='Benchmark type: macro (7 nutrients) or all (16 nutrients)')
     
     # Training arguments
     parser.add_argument('--epochs', type=int, default=500,
@@ -488,6 +493,7 @@ def main():
     
     # Override with command line arguments
     config.data.data_dir = args.data_dir
+    config.data.benchmark_type = args.benchmark_type
     config.training.epochs = args.epochs
     config.training.batch_size = args.batch_size
     config.training.learning_rate = args.lr
