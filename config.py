@@ -86,9 +86,8 @@ class Config:
     
     def __post_init__(self):
         """Validate configuration."""
-        assert 0 < self.data.train_ratio < 1
-        assert 0 < self.data.val_ratio < 1
-        assert self.data.train_ratio + self.data.val_ratio < 1
+        assert 0 < self.data.test_size < 1
+        assert 0 < self.data.val_size < 1
         assert self.model.embedding_dim > 0
         assert self.model.num_layers > 0
 
