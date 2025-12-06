@@ -149,14 +149,23 @@ def health_score(
         Health score (0-1)
     """
     # Get user tags
-    user_tags_batch = user_tags[users].cpu()  # (num_users, num_tags)
+    user_tags_batch = user_tags[users].cpu()  # (num_users, num_user_tags)
     
     # Get food tags for recommended items
     recommended_items = top_k_items[users].cpu()  # (num_users, k)
-    food_tags_batch = food_tags[recommended_items].cpu()  # (num_users, k, num_tags)
+    food_tags_batch = food_tags[recommended_items].cpu()  # (num_users, k, num_food_tags)
+    
+    # Handle dimension mismatch between user and food tags
+    num_user_tags = user_tags_batch.shape[1]
+    num_food_tags = food_tags_batch.shape[2]
+    min_tags = min(num_user_tags, num_food_tags)
+    
+    # Truncate to matching dimensions
+    user_tags_batch = user_tags_batch[:, :min_tags]
+    food_tags_batch = food_tags_batch[:, :, :min_tags]
     
     # Expand user tags for broadcasting
-    user_tags_expanded = user_tags_batch.unsqueeze(1)  # (num_users, 1, num_tags)
+    user_tags_expanded = user_tags_batch.unsqueeze(1)  # (num_users, 1, min_tags)
     
     # Check for at least one common tag
     common_tags = torch.logical_and(user_tags_expanded > 0, food_tags_batch > 0)
