@@ -1,0 +1,29 @@
+# FastAPI & Web
+fastapi[standard]
+uvicorn
+python-multipart
+sse-starlette
+
+# Database & Auth
+supabase
+python-decouple
+
+# ML & Model (torch, torch-geometric, torch-scatter, torch-sparse already installed)
+# Install torch-scatter torch-sparse with: pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.8.0+cpu.html
+numpy
+pandas
+scikit-learn
+
+# LLM & AI
+langchain
+langgraph
+google-genai
+langchain-google-genai
+langchain-openai
+openai
+
+# Utilities
+pydantic
+pydantic-settings
+httpx
+tenacity
