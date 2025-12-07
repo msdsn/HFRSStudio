@@ -46,10 +46,10 @@ export function ProfilePage() {
     try {
       const updated = await api.updateProfile({
         full_name: fullName,
-        age: parseInt(age) || undefined,
-        gender,
+        age: age ? parseInt(age) : undefined,
+        gender: gender || undefined,
         health_tags: healthTags,
-      });
+      } as Partial<import('../../lib/api').UserProfile>);
 
       updateUser(updated);
       setSuccess(true);
@@ -169,7 +169,7 @@ export function ProfilePage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {(user?.dietary_restrictions || []).map((restriction) => (
+              {(user?.dietary_restrictions || []).map((restriction: string) => (
                 <span
                   key={restriction}
                   className="px-3 py-1 bg-orange-50 text-orange-700 rounded-full text-sm"
@@ -194,7 +194,7 @@ export function ProfilePage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {(user?.allergies || []).map((allergy) => (
+              {(user?.allergies || []).map((allergy: string) => (
                 <span
                   key={allergy}
                   className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-sm"

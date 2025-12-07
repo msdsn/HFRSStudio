@@ -113,7 +113,7 @@ export function FoodCard({ food, rank }: FoodCardProps) {
             <div>
               <h4 className="text-sm font-medium text-slate-900 mb-1">Health Benefits</h4>
               <ul className="text-sm text-slate-600 space-y-1">
-                {food.explanation.health_benefits.map((benefit, i) => (
+                {food.explanation.health_benefits.map((benefit: string, i: number) => (
                   <li key={i} className="flex items-start">
                     <span className="text-emerald-500 mr-2">✓</span>
                     {benefit}
@@ -129,7 +129,7 @@ export function FoodCard({ food, rank }: FoodCardProps) {
               <div>
                 <h4 className="text-sm font-medium text-emerald-700 mb-1">Strengths</h4>
                 <ul className="text-xs text-slate-600 space-y-0.5">
-                  {food.strengths.slice(0, 3).map((s, i) => (
+                  {food.strengths.slice(0, 3).map((s: string, i: number) => (
                     <li key={i}>+ {s}</li>
                   ))}
                 </ul>
@@ -140,7 +140,7 @@ export function FoodCard({ food, rank }: FoodCardProps) {
               <div>
                 <h4 className="text-sm font-medium text-orange-700 mb-1">Concerns</h4>
                 <ul className="text-xs text-slate-600 space-y-0.5">
-                  {food.concerns.slice(0, 3).map((c, i) => (
+                  {food.concerns.slice(0, 3).map((c: string, i: number) => (
                     <li key={i}>• {c}</li>
                   ))}
                 </ul>
@@ -168,12 +168,12 @@ export function FoodCard({ food, rank }: FoodCardProps) {
             <div>
               <h4 className="text-sm font-medium text-slate-900 mb-2">Key Nutrients</h4>
               <div className="flex flex-wrap gap-2">
-                {Object.entries(food.nutrients).slice(0, 6).map(([key, value]) => (
+                {Object.entries(food.nutrients).slice(0, 6).map(([key, value]: [string, number]) => (
                   <span
                     key={key}
                     className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs"
                   >
-                    {key}: {typeof value === 'number' ? value.toFixed(1) : value}
+                    {key}: {value.toFixed(1)}
                   </span>
                 ))}
               </div>
