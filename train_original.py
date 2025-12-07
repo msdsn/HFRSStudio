@@ -766,15 +766,13 @@ def main(args):
                 eval(model, feature_dict, user_tags, food_tags, val_edge_index, pos_val_edge_index, neg_val_edge_index,
                                 [neg_train_edge_index], args.K, LAMBDA)
             
-            print(f"Epoch: {epoch}, "
-                  f"train_loss: {round(train_loss.item(), 5)}, "
-                  f"val_loss: {round(val_loss, 5)}, "
-                  f"val_recall@{args.K}: {round(recall, 5)}, "
-                  f"val_precision@{args.K}: {round(precision, 5)}, "
-                  f"val_ndcg@{args.K}: {round(ndcg, 5)}, "
-                  f"val_health_score: {round(health_score, 5)}, "
-                  f"avg_health_tags_ratio: {round(avg_health_tags_ratio, 5)}, "
-                  f"percentage_recommended_foods: {round(percentage_recommended_foods, 5)}")
+            print(f"Epoch {epoch}/{args.epochs} | "
+                  f"Loss: {train_loss.item():.4f} | "
+                  f"Recall={recall*100:.2f}%, "
+                  f"NDCG={ndcg*100:.2f}%, "
+                  f"H-Score={health_score*100:.2f}%, "
+                  f"AvgTags={avg_health_tags_ratio:.2f}, "
+                  f"%Foods={percentage_recommended_foods*100:.3f}%")
 
             train_losses.append(train_loss.item())
             val_losses.append(val_loss)
@@ -789,15 +787,25 @@ def main(args):
                 eval(model, feature_dict, user_tags, food_tags, test_edge_index, pos_test_edge_index, neg_test_edge_index,
                                 [neg_train_edge_index], args.K, LAMBDA)
         
-        print(f"\n{'='*60}")
-        print("Final Test Results (Original MOPI-HFRS Code)")
-        print(f"{'='*60}")
-        print(f"test_recall@{args.K}: {round(recall, 5)}, "
-              f"test_precision@{args.K}: {round(precision, 5)}, "
-              f"test_ndcg@{args.K}: {round(ndcg, 5)}, "
-              f"test_health_score: {round(health_score, 5)}, "
-              f"avg_health_tags_ratio: {round(avg_health_tags_ratio, 5)}, "
-              f"percentage_recommended_foods: {round(percentage_recommended_foods, 5)}")
+        k = args.K
+        print(f"\n{'='*80}")
+        print(f"MOPI-HFRS Test Results - Original Code (K={k})")
+        print(f"{'='*80}")
+        print(f"{'Metric':<20} {'Value':>15}")
+        print("-" * 40)
+        print(f"{'Recall@' + str(k):<20} {recall*100:>14.2f}%")
+        print(f"{'Precision@' + str(k):<20} {precision*100:>14.2f}%")
+        print(f"{'NDCG@' + str(k):<20} {ndcg*100:>14.2f}%")
+        print(f"{'H-Score@' + str(k):<20} {health_score*100:>14.2f}%")
+        print(f"{'AvgTags@' + str(k):<20} {avg_health_tags_ratio:>15.2f}")
+        print(f"{'%Foods@' + str(k):<20} {percentage_recommended_foods*100:>14.3f}%")
+        print(f"{'='*80}")
+        
+        # Paper table format
+        print(f"\nPaper Table Format:")
+        print(f"| MOPI-HFRS | {recall*100:.2f} | {ndcg*100:.2f} | "
+              f"{health_score*100:.2f} | {avg_health_tags_ratio:.2f} | "
+              f"{percentage_recommended_foods*100:.3f} |")
 
 
 if __name__ == '__main__':

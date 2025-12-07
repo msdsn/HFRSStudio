@@ -428,7 +428,11 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
             print(f"  Loss: BPR={loss_dict.get('bpr', 0):.4f}, "
                   f"Health={loss_dict.get('health', 0):.4f}, "
                   f"Diversity={loss_dict.get('diversity', 0):.4f}")
-            print(f"  Val: {metric_tracker.summary()}")
+            print(f"  Val: Recall={val_metrics['recall']*100:.2f}%, "
+                  f"NDCG={val_metrics['ndcg']*100:.2f}%, "
+                  f"H-Score={val_metrics['health_score']*100:.2f}%, "
+                  f"AvgTags={val_metrics['avg_health_tags']:.2f}, "
+                  f"%Foods={val_metrics['pct_foods_recommended']*100:.3f}%")
             
             # Save best model
             if val_metrics['recall'] > best_recall:
@@ -460,9 +464,26 @@ def train(config: Config, use_pt_file: bool = False, pt_file: str = None):
         config.training.k
     )
     
-    print("\nTest Results:")
-    for name, value in test_metrics.items():
-        print(f"  {name}: {value:.4f}")
+    # Print results in table format (matching paper format)
+    k = config.training.k
+    print(f"\n{'='*80}")
+    print(f"MOPI-HFRS Test Results (K={k})")
+    print(f"{'='*80}")
+    print(f"{'Metric':<20} {'Value':>15}")
+    print("-" * 40)
+    print(f"{'Recall@' + str(k):<20} {test_metrics['recall']*100:>14.2f}%")
+    print(f"{'Precision@' + str(k):<20} {test_metrics['precision']*100:>14.2f}%")
+    print(f"{'NDCG@' + str(k):<20} {test_metrics['ndcg']*100:>14.2f}%")
+    print(f"{'H-Score@' + str(k):<20} {test_metrics['health_score']*100:>14.2f}%")
+    print(f"{'AvgTags@' + str(k):<20} {test_metrics['avg_health_tags']:>15.2f}")
+    print(f"{'%Foods@' + str(k):<20} {test_metrics['pct_foods_recommended']*100:>14.3f}%")
+    print(f"{'='*80}")
+    
+    # Also print in paper comparison format
+    print(f"\nPaper Table Format:")
+    print(f"| MOPI-HFRS | {test_metrics['recall']*100:.2f} | {test_metrics['ndcg']*100:.2f} | "
+          f"{test_metrics['health_score']*100:.2f} | {test_metrics['avg_health_tags']:.2f} | "
+          f"{test_metrics['pct_foods_recommended']*100:.3f} |")
     
     # Save final model
     torch.save({
