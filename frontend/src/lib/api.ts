@@ -118,7 +118,7 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${API_URL}${endpoint}`;
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...((options.headers as Record<string, string>) || {}),
@@ -175,7 +175,7 @@ class ApiClient {
 
   // Recommendations endpoints
   async generateRecommendations(params: {
-    num_recommendations?: number;
+      num_recommendations?: number;
     include_explanations?: boolean;
   }): Promise<RecommendationResponse> {
     const queryParams = new URLSearchParams();

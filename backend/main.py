@@ -3,9 +3,10 @@ HFRS API - Health-aware Food Recommendation System
 FastAPI backend with LangGraph multi-agent workflow.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import os
 
@@ -71,10 +72,31 @@ static_paths = [
     os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"),  # Local dev: ../frontend/dist
 ]
 
-for frontend_dist in static_paths:
-    if os.path.exists(frontend_dist):
-        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+# Find the frontend dist directory
+frontend_dist = None
+for path in static_paths:
+    if os.path.exists(path):
+        frontend_dist = path
         break
+
+if frontend_dist:
+    # Mount static files for assets (js, css, images)
+    assets_dir = os.path.join(frontend_dist, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+    
+    # Serve index.html for SPA routes (catch-all for non-API routes)
+    @app.get("/{full_path:path}")
+    async def serve_spa(request: Request, full_path: str):
+        """Serve index.html for all non-API routes (SPA fallback)."""
+        # Check if it's a file request (has extension)
+        if "." in full_path.split("/")[-1]:
+            file_path = os.path.join(frontend_dist, full_path)
+            if os.path.exists(file_path):
+                return FileResponse(file_path)
+        
+        # Return index.html for all other routes (SPA routing)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
 
 
 if __name__ == "__main__":
