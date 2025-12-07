@@ -548,8 +548,7 @@ class GraphChannelAttLayer(nn.Module):
         
         fused_edge_mask = torch.sum(weighted_edge_masks, dim=0)
 
-        # Changed from > 0.5 to > 0 (bug fix for edge filtering)
-        return fused_edge_mask > 0
+        return fused_edge_mask > 0.5
 
 
 class SignedGCN(torch.nn.Module):

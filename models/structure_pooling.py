@@ -64,9 +64,8 @@ class StructurePooling(nn.Module):
         weighted_edge_masks = edge_mask * softmax_weights[:, None]
         fused_edge_mask = torch.sum(weighted_edge_masks, dim=0)
         
-        # Use positive values instead of fixed threshold
-        # This is more robust for large graphs where normalized values are small
-        return fused_edge_mask > 0
+        # Original threshold from paper
+        return fused_edge_mask > 0.5
     
     def forward_soft(self, edge_mask_list: List[Tensor]) -> Tensor:
         """
