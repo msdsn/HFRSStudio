@@ -1,4 +1,4 @@
-# Backend Dockerfile for HFRS API
+# Backend Dockerfile for HFRS API (Development/Docker Compose)
 FROM python:3.11-slim
 
 # Set working directory
@@ -16,7 +16,10 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install PyTorch and related packages (CPU version for Railway)
+# Install gdown for downloading from Google Drive
+RUN pip install --no-cache-dir gdown
+
+# Install PyTorch and related packages (CPU version)
 RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # Install torch-geometric dependencies
@@ -29,17 +32,12 @@ RUN pip install --no-cache-dir torch-geometric
 # Copy application code
 COPY . .
 
-# Copy data files
-COPY data/ ./data/
-COPY checkpoints/ ./checkpoints/ || true
-
-# Expose port (Railway uses PORT env var)
+# Expose port
 EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; import os; port = os.getenv('PORT', '8000'); requests.get(f'http://localhost:{port}/api/health')" || exit 1
+    CMD python -c "import requests; requests.get('http://localhost:8000/api/health')" || exit 1
 
-# Run application (Railway sets PORT env var)
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
-
+# Run application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

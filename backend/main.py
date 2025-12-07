@@ -65,9 +65,16 @@ async def health_check():
 
 
 # Serve static files (frontend build) in production
-frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-if os.path.exists(frontend_dist):
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+# Check multiple possible locations for frontend dist
+static_paths = [
+    os.path.join(os.path.dirname(__file__), "static"),  # Docker: /app/static
+    os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"),  # Local dev: ../frontend/dist
+]
+
+for frontend_dist in static_paths:
+    if os.path.exists(frontend_dist):
+        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+        break
 
 
 if __name__ == "__main__":

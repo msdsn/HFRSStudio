@@ -1,6 +1,40 @@
-version: '3.8'
-
 services:
+  # Production mode: Single container with frontend+backend
+  # Use: docker compose --profile production up
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=/api
+        - VITE_SUPABASE_URL=${SUPABASE_URL}
+        - VITE_SUPABASE_KEY=${SUPABASE_KEY}
+    container_name: hfrs-app
+    ports:
+      - "8000:8000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE=${SUPABASE_SERVICE}
+      - GEMINI_KEY=${GEMINI_KEY}
+      - OPENAI_KEY=${OPENAI_KEY}
+      - DEVICE=cpu
+      - DEBUG=false
+      - PORT=8000
+    volumes:
+      - ./backend/data:/app/data:ro
+      - ./backend/checkpoints:/app/checkpoints:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    profiles:
+      - production
+
+  # Development mode: Separate containers
+  # Use: docker compose --profile development up
   backend:
     build:
       context: ./backend
@@ -14,7 +48,7 @@ services:
       - GEMINI_KEY=${GEMINI_KEY}
       - OPENAI_KEY=${OPENAI_KEY}
       - DEVICE=cpu
-      - DEBUG=false
+      - DEBUG=true
     volumes:
       - ./backend/data:/app/data:ro
       - ./backend/checkpoints:/app/checkpoints:ro
@@ -25,20 +59,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    profiles:
+      - development
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8000/api
+        - VITE_SUPABASE_URL=${SUPABASE_URL}
+        - VITE_SUPABASE_KEY=${SUPABASE_KEY}
     container_name: hfrs-frontend
     ports:
       - "80:80"
     depends_on:
       - backend
-    environment:
-      - VITE_API_URL=http://localhost:8000/api
-      - VITE_SUPABASE_URL=${SUPABASE_URL}
-      - VITE_SUPABASE_KEY=${SUPABASE_KEY}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
@@ -46,4 +82,5 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
+    profiles:
+      - development

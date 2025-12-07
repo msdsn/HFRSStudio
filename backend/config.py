@@ -35,7 +35,12 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 2048
     
     # CORS - can be set via CORS_ORIGINS env var (comma-separated)
-    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    cors_origins: list[str] = [
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Alternative dev port
+        "http://localhost",       # Docker nginx (port 80)
+        "http://localhost:8000",  # Backend itself (for testing)
+    ]
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
