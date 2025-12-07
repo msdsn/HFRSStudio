@@ -148,14 +148,14 @@ class ApiClient {
 
   async updateProfile(data: Partial<UserProfile>): Promise<UserProfile> {
     return this.request<UserProfile>('/users/me', {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async updateHealthProfile(data: HealthProfile): Promise<UserProfile> {
     return this.request<UserProfile>('/users/me/health-profile', {
-      method: 'PUT',
+      method: 'POST',
       body: JSON.stringify(data),
     });
   }

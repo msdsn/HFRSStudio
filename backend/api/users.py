@@ -106,6 +106,49 @@ async def update_health_profile(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put("/me/preferences", response_model=UserProfile)
+async def update_preferences(
+    preferences: Dict[str, Any],
+    current_user: dict = Depends(get_current_user)
+):
+    """Update user's food preferences."""
+    supabase = get_supabase_client()
+    
+    try:
+        update_data = {
+            "cuisine_preferences": preferences.get("cuisines", []),
+            "disliked_foods": preferences.get("disliked_foods", []),
+            "favorite_foods": preferences.get("favorite_foods", []),
+            "updated_at": "now()"
+        }
+        
+        response = supabase.table("profiles").update(update_data).eq("id", current_user["id"]).execute()
+        
+        return UserProfile(**response.data[0])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/me/complete-onboarding", response_model=UserProfile)
+async def complete_onboarding(
+    current_user: dict = Depends(get_current_user)
+):
+    """Mark onboarding as completed."""
+    supabase = get_supabase_client()
+    
+    try:
+        update_data = {
+            "onboarding_completed": True,
+            "updated_at": "now()"
+        }
+        
+        response = supabase.table("profiles").update(update_data).eq("id", current_user["id"]).execute()
+        
+        return UserProfile(**response.data[0])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/me/food-history")
 async def get_food_history(
     current_user: dict = Depends(get_current_user),
