@@ -175,20 +175,15 @@ class ApiClient {
 
   // Recommendations endpoints
   async generateRecommendations(params: {
-      num_recommendations?: number;
+    num_recommendations?: number;
     include_explanations?: boolean;
   }): Promise<RecommendationResponse> {
-    const queryParams = new URLSearchParams();
-    if (params.num_recommendations) {
-      queryParams.set('num_recommendations', params.num_recommendations.toString());
-    }
-    if (params.include_explanations !== undefined) {
-      queryParams.set('include_explanations', params.include_explanations.toString());
-    }
-
-    const endpoint = `/recommendations/generate${queryParams.toString() ? `?${queryParams}` : ''}`;
-    return this.request<RecommendationResponse>(endpoint, {
+    return this.request<RecommendationResponse>('/recommendations/generate', {
       method: 'POST',
+      body: JSON.stringify({
+        num_recommendations: params.num_recommendations || 10,
+        include_explanations: params.include_explanations ?? true,
+      }),
     });
   }
 
