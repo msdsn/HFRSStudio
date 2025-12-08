@@ -14,6 +14,8 @@ AI-powered personalized food recommendation system based on the MOPI-HFRS paper,
 - **LangGraph Workflow**: State machine orchestration of agents
 - **Real-time Streaming**: Live updates as agents complete analysis
 - **Supabase Auth**: Secure user authentication and data storage
+  - 🎭 **Anonymous Sign-in**: Guest users can explore without registration
+  - 🔗 **Email Linking**: Convert guest accounts to permanent accounts anytime
 - **Modern UI**: React + Tailwind CSS with workflow visualizer
 
 ## Architecture
@@ -59,9 +61,14 @@ source venv/bin/activate  # or venv\Scripts\activate on Windows
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your API keys
+# Configure environment - create .env file with these variables:
+# SUPABASE_URL=your_supabase_project_url
+# SUPABASE_SERVICE=your_supabase_service_role_key
+# SUPABASE_ANON=your_supabase_anon_key
+# GEMINI_KEY=your_gemini_api_key
+# OPENAI_KEY=your_openai_api_key
+# DEVICE=cpu  # or cuda if available
+# DEBUG=false
 
 # Run server
 uvicorn main:app --reload
@@ -75,15 +82,22 @@ cd frontend
 # Install dependencies
 npm install
 
-# Configure environment
-cp .env.example .env.local
-# Edit .env.local with your Supabase keys
+# Configure environment - create .env.local file with these variables:
+# VITE_API_URL=http://localhost:8000/api
+# VITE_SUPABASE_URL=your_supabase_project_url
+# VITE_SUPABASE_KEY=your_supabase_anon_key
 
 # Run development server
 npm run dev
 ```
 
 ### Supabase Setup
+
+1. **Enable Anonymous Sign-ins:**
+   - Go to Supabase Dashboard → Authentication → Providers
+   - Enable "Anonymous" provider
+
+2. **Run Database Schema:**
 
 Run these SQL commands in your Supabase SQL editor:
 
@@ -169,11 +183,14 @@ The checkpoint should contain:
    ```bash
    railway variables set SUPABASE_URL=your_supabase_url
    railway variables set SUPABASE_SERVICE=your_supabase_service_key
+   railway variables set SUPABASE_ANON=your_supabase_anon_key
    railway variables set GEMINI_KEY=your_gemini_api_key
    railway variables set OPENAI_KEY=your_openai_api_key
    railway variables set DEVICE=cpu
    railway variables set DEBUG=false
    ```
+   
+   **Important:** Enable "Allow anonymous sign-ins" in Supabase Dashboard → Authentication → Providers → Anonymous
 
 3. **Deploy Backend:**
    - In Railway dashboard, create a new service

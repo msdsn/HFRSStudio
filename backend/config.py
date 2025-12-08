@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     
     # Supabase
     supabase_url: str
-    supabase_service: str  # Service key for backend
+    supabase_service: str  # Service key for backend (admin operations)
+    supabase_anon: str  # Anon key for public auth operations
     
     # LLM API Keys
     gemini_key: str

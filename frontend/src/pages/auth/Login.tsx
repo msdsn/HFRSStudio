@@ -12,7 +12,7 @@ import { useAuthStore } from '../../stores/auth';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const login = useAuthStore((state) => state.login);
+  const { login, loginAnonymously } = useAuthStore();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,6 +29,20 @@ export function LoginPage() {
       navigate('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setError('');
+    setIsLoading(true);
+
+    try {
+      await loginAnonymously();
+      navigate('/onboarding');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Guest login failed');
     } finally {
       setIsLoading(false);
     }
@@ -89,6 +103,25 @@ export function LoginPage() {
 
         <Button type="submit" className="w-full" isLoading={isLoading}>
           Sign in
+        </Button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-300" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white text-slate-500">or</span>
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full text-lg py-6 border-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+          isLoading={isLoading}
+          onClick={handleGuestLogin}
+        >
+          🎉 Continue as Guest
         </Button>
 
         <p className="text-center text-sm text-slate-600">

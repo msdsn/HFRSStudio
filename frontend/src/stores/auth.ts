@@ -14,10 +14,13 @@ interface AuthState {
   refreshToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isAnonymous: boolean;
   
   // Actions
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName?: string) => Promise<void>;
+  loginAnonymously: () => Promise<void>;
+  linkEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   updateUser: (data: Partial<UserProfile>) => void;
@@ -32,6 +35,7 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isLoading: true,
       isAuthenticated: false,
+      isAnonymous: false,
 
       login: async (email: string, password: string) => {
         set({ isLoading: true });
@@ -58,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
             accessToken,
             refreshToken,
             isAuthenticated: true,
+            isAnonymous: false,
             isLoading: false,
           });
         } catch (error) {
@@ -97,12 +102,81 @@ export const useAuthStore = create<AuthState>()(
               accessToken,
               refreshToken,
               isAuthenticated: true,
+              isAnonymous: false,
               isLoading: false,
             });
           } else {
             // Email confirmation required
             set({ isLoading: false });
           }
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      loginAnonymously: async () => {
+        set({ isLoading: true });
+        try {
+          // Use Supabase for anonymous auth
+          const { data, error } = await supabase.auth.signInAnonymously();
+
+          if (error) throw error;
+
+          const accessToken = data.session?.access_token || null;
+          const refreshToken = data.session?.refresh_token || null;
+
+          // Set token for API calls
+          api.setToken(accessToken);
+
+          // Get or create user profile
+          const profile = await api.getProfile();
+
+          set({
+            user: profile,
+            accessToken,
+            refreshToken,
+            isAuthenticated: true,
+            isAnonymous: true,
+            isLoading: false,
+          });
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      linkEmail: async (email: string, password: string) => {
+        set({ isLoading: true });
+        try {
+          // Update user with email and password
+          const { data, error } = await supabase.auth.updateUser({
+            email,
+            password,
+          });
+
+          if (error) throw error;
+
+          // Get fresh session
+          const { data: sessionData } = await supabase.auth.getSession();
+          
+          const accessToken = sessionData.session?.access_token || null;
+          const refreshToken = sessionData.session?.refresh_token || null;
+
+          // Update token for API calls
+          api.setToken(accessToken);
+
+          // Get updated profile
+          const profile = await api.getProfile();
+
+          set({
+            user: profile,
+            accessToken,
+            refreshToken,
+            isAuthenticated: true,
+            isAnonymous: false,
+            isLoading: false,
+          });
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -122,6 +196,7 @@ export const useAuthStore = create<AuthState>()(
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
+          isAnonymous: false,
           isLoading: false,
         });
       },
@@ -168,11 +243,15 @@ export const useAuthStore = create<AuthState>()(
             api.setToken(session.access_token);
             const profile = await api.getProfile();
 
+            // Check if user is anonymous (no email)
+            const isAnonymous = !session.user.email;
+
             set({
               user: profile,
               accessToken: session.access_token,
               refreshToken: session.refresh_token || null,
               isAuthenticated: true,
+              isAnonymous,
               isLoading: false,
             });
           } else {
@@ -181,6 +260,7 @@ export const useAuthStore = create<AuthState>()(
               accessToken: null,
               refreshToken: null,
               isAuthenticated: false,
+              isAnonymous: false,
               isLoading: false,
             });
           }
@@ -191,6 +271,7 @@ export const useAuthStore = create<AuthState>()(
             accessToken: null,
             refreshToken: null,
             isAuthenticated: false,
+            isAnonymous: false,
             isLoading: false,
           });
         }
@@ -201,6 +282,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
+        isAnonymous: state.isAnonymous,
       }),
     }
   )
