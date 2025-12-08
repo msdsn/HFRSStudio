@@ -150,7 +150,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           // Update user with email and password
-          const { data, error } = await supabase.auth.updateUser({
+          const { error } = await supabase.auth.updateUser({
             email,
             password,
           });
